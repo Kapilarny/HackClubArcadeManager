@@ -54,7 +54,7 @@ object HackClubAPI {
 
             // Get the response
             val response = conn.inputStream.bufferedReader().use { it.readText() }
-            println(response);
+//            println(response);
 
             // Parse the response
             session = Json.decodeFromString(response);
@@ -72,14 +72,7 @@ object HackClubAPI {
             val url = URI("https://hackhour.hackclub.com/api/pause/$slackID").toURL();
 
             // Add the key as the Authorization header
-            val conn : HttpURLConnection = url.openConnection() as HttpURLConnection;
-            conn.requestMethod = "POST";
-            conn.setRequestProperty("Authorization", "Bearer ${PluginSettings.instance.state.apiKey}");
-
-            conn.connect();
-
-            // Get the response
-            return conn.responseCode == 200;
+            return SuccessfulPOST(url.openConnection() as HttpURLConnection);
         } catch (e: Exception) {
             println(e);
         }
@@ -93,18 +86,55 @@ object HackClubAPI {
             val url = URI("https://hackhour.hackclub.com/api/cancel/$slackID").toURL();
 
             // Add the key as the Authorization header
+            return SuccessfulPOST(url.openConnection() as HttpURLConnection);
+        } catch (e: Exception) {
+            println(e);
+        }
+
+        return false;
+    }
+
+    fun StartSession(str: String) : Boolean {
+        try {
+            val slackID = PluginSettings.instance.state.slackID;
+            val url = URI("https://hackhour.hackclub.com/api/start/$slackID").toURL();
+
+            val input_json = """
+                {
+                    "work": "$str"
+                }
+            """.trimIndent();
+
             val conn : HttpURLConnection = url.openConnection() as HttpURLConnection;
             conn.requestMethod = "POST";
             conn.setRequestProperty("Authorization", "Bearer ${PluginSettings.instance.state.apiKey}");
+            conn.setRequestProperty("Content-Type", "application/json");
+            conn.setRequestProperty("Accept", "*/*");
+            conn.doOutput = true;
 
             conn.connect();
 
+            conn.outputStream.bufferedWriter().use { it.write(input_json); it.flush(); }
+
             // Get the response
+//            val response = conn.inputStream.bufferedReader().use { it.readText() }
+//            println(response);
+
             return conn.responseCode == 200;
         } catch (e: Exception) {
             println(e);
         }
 
         return false;
+    }
+
+    private fun SuccessfulPOST(conn: HttpURLConnection) : Boolean {
+        conn.requestMethod = "POST";
+        conn.setRequestProperty("Authorization", "Bearer ${PluginSettings.instance.state.apiKey}");
+
+        conn.connect();
+
+        // Get the response
+        return conn.responseCode == 200;
     }
 }

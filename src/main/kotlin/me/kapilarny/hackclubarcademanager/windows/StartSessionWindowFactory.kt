@@ -42,13 +42,12 @@ class StartSessionWindowFactory : ToolWindowFactory, DumbAware {
 
             // Check if the API is online
             val apiOnline = HackClubAPI.PingAPI();
-            println("API Online: $apiOnline");
+//            println("API Online: $apiOnline");
             if(!apiOnline) {
                 state = WindowState.ERROR;
             }
 
             updateSession();
-            render();
 
             // Update the session every 60 seconds
             Timer(60000) {
@@ -80,8 +79,8 @@ class StartSessionWindowFactory : ToolWindowFactory, DumbAware {
                     slackID = PluginSettings.instance.state.slackID;
 
                     // Print the API key and Slack ID to the console
-                    println("API Key: $apiKey");
-                    println("Slack ID: $slackID");
+//                    println("API Key: $apiKey");
+//                    println("Slack ID: $slackID");
                 }
 
                 return;
@@ -127,8 +126,16 @@ class StartSessionWindowFactory : ToolWindowFactory, DumbAware {
                 displayPanel.add(formPanel, BorderLayout.NORTH)
 
                 btn.addActionListener {
-                    // Change the state to IN_PROGRESS
-                    state = WindowState.IN_PROGRESS;
+                    if(descText.text.equals("")) {
+                        return@addActionListener;
+                    }
+
+                    if(!HackClubAPI.StartSession(descText.text) || !updateSession()) {
+                        state = WindowState.ERROR;
+                        render();
+                        return@addActionListener;
+                    }
+
                     render();
                 }
             }
@@ -206,31 +213,34 @@ class StartSessionWindowFactory : ToolWindowFactory, DumbAware {
             contentPanel.repaint();
         }
 
-        fun updateSession() {
-            println("Updating session...");
+        fun updateSession() : Boolean {
+//            println("Updating session...");
 
             // Update the session
             if(!HackClubAPI.UpdateSession()) {
                 state = WindowState.ERROR;
+                return false;
             }
 
-            if(HackClubAPI.session.data.completed || HackClubAPI.session.data.remaining == 0) {
+            if(HackClubAPI.session.data.completed) {
                 state = WindowState.NOT_STARTED;
             } else {
                 state = WindowState.IN_PROGRESS;
 
                 descText.text = HackClubAPI.session.data.work;
-            }
 
-            if(HackClubAPI.session.data.paused) {
-                state = WindowState.PAUSED;
-            } else {
-                state = WindowState.IN_PROGRESS;
+                if(HackClubAPI.session.data.paused) {
+                    state = WindowState.PAUSED;
+                } else {
+                    state = WindowState.IN_PROGRESS;
+                }
             }
 
             remainingTime.text = "Remaining Time: ${HackClubAPI.session.data.remaining}";
 
             render();
+
+            return true;
         }
     }
 }
