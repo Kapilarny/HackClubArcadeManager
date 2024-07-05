@@ -5,6 +5,7 @@ import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.util.ui.JBUI
+import me.kapilarny.hackclubarcademanager.HackClubAPI
 import me.kapilarny.hackclubarcademanager.PluginSettings
 import java.awt.BorderLayout
 import java.awt.GridBagConstraints
@@ -31,6 +32,7 @@ class StartSessionWindowFactory : ToolWindowFactory, DumbAware {
         val contentPanel = JPanel();
 
         var state = WindowState.NOT_STARTED;
+        val remainingTime = JLabel("Remaining Time: ");
         val descText = JTextField(1);
 
         private var displayPanel = JPanel();
@@ -38,13 +40,26 @@ class StartSessionWindowFactory : ToolWindowFactory, DumbAware {
             contentPanel.layout = BorderLayout(0, 20);
             contentPanel.border = BorderFactory.createEmptyBorder(40, 0, 0, 0);
 
+            // Check if the API is online
+            val apiOnline = HackClubAPI.PingAPI();
+            println("API Online: $apiOnline");
+            if(!apiOnline) {
+                state = WindowState.ERROR;
+            }
+
+            updateSession();
             render();
+
+            // Update the session every 60 seconds
+            Timer(60000) {
+                updateSession();
+            }.start();
         }
 
         fun update() {
             if(state == WindowState.ERROR) {
                 // Display an error message
-                displayPanel.add(JLabel("An error occurred. Ensure that your API key and Slack ID are correct and try again!"));
+                displayPanel.add(JLabel("An error occurred while accessing the API. Ensure that your API key and Slack ID are correct and try again!"));
                 return;
             }
 
@@ -132,25 +147,42 @@ class StartSessionWindowFactory : ToolWindowFactory, DumbAware {
                 gbc.gridwidth = 1
                 formPanel.add(JLabel("Session Description: ${descText.text}"), gbc)
 
+                // Remaining Time Label
+                gbc.gridx = 0
+                gbc.gridy = 1
+                gbc.gridwidth = 1
+                formPanel.add(remainingTime, gbc)
+
                 // End, Pause/Resume Button
                 val endButton = JButton("End Session")
                 val pauseResumeButton = JButton(if (state == WindowState.PAUSED) "Resume Session" else "Pause Session");
                 gbc.gridx = 0
-                gbc.gridy = 1
+                gbc.gridy = 2
                 gbc.gridwidth = 1
                 formPanel.add(endButton, gbc)
                 gbc.gridx = 2
                 formPanel.add(pauseResumeButton, gbc)
 
                 endButton.addActionListener {
-                    // Change the state to NOT_STARTED
-                    state = WindowState.NOT_STARTED;
+                    if(!HackClubAPI.EndSession()) {
+                        state = WindowState.ERROR;
+                        render();
+                        return@addActionListener;
+                    }
+
                     render();
                 }
 
                 pauseResumeButton.addActionListener {
-                    // Change the state to PAUSED if it is currently IN_PROGRESS, and vice versa
-                    state = if (state == WindowState.IN_PROGRESS) WindowState.PAUSED else WindowState.IN_PROGRESS;
+                    if(!HackClubAPI.PauseSession()) {
+                        state = WindowState.ERROR;
+                        render();
+                        return@addActionListener;
+                    }
+
+                    state = if(state == WindowState.PAUSED) WindowState.IN_PROGRESS else WindowState.PAUSED;
+                    HackClubAPI.session.data.paused = !HackClubAPI.session.data.paused;
+
                     render();
                 }
 
@@ -163,7 +195,7 @@ class StartSessionWindowFactory : ToolWindowFactory, DumbAware {
             // Clear the display panel
             contentPanel.removeAll();
 
-            displayPanel = JPanel()
+            displayPanel = JPanel();
 
             update();
 
@@ -172,6 +204,33 @@ class StartSessionWindowFactory : ToolWindowFactory, DumbAware {
 
             contentPanel.revalidate();
             contentPanel.repaint();
+        }
+
+        fun updateSession() {
+            println("Updating session...");
+
+            // Update the session
+            if(!HackClubAPI.UpdateSession()) {
+                state = WindowState.ERROR;
+            }
+
+            if(HackClubAPI.session.data.completed || HackClubAPI.session.data.remaining == 0) {
+                state = WindowState.NOT_STARTED;
+            } else {
+                state = WindowState.IN_PROGRESS;
+
+                descText.text = HackClubAPI.session.data.work;
+            }
+
+            if(HackClubAPI.session.data.paused) {
+                state = WindowState.PAUSED;
+            } else {
+                state = WindowState.IN_PROGRESS;
+            }
+
+            remainingTime.text = "Remaining Time: ${HackClubAPI.session.data.remaining}";
+
+            render();
         }
     }
 }
